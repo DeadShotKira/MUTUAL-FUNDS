@@ -73,7 +73,9 @@ export interface BuyOnDipFund {
   sheetName: string;
   latestNAV: number;
   percentValue: number;
+  percentDisplay?: string;
   tag: string;
+  status?: string;
   severity: 'alert' | 'warning' | 'ok' | 'info';
   high10: number;
   low10: number;

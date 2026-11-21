@@ -1,15 +1,22 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { DashboardData, MutualFund } from '../types/portfolio';
 import { fetchPortfolioDashboard } from '../services/api';
 import { Navbar } from '../components/Navbar';
 import { PortfolioSummaryCards } from '../components/PortfolioSummaryCards';
-import { InvestmentUniverse3D } from '../components/InvestmentUniverse3D';
 import { BestPerformerCard } from '../components/BestPerformerCard';
 import { BuyOnDipAlerts } from '../components/BuyOnDipAlerts';
 import { FundCard } from '../components/FundCard';
-import { FundDrawer } from '../components/FundDrawer';
 import { StatutoryDisclaimer } from '../components/StatutoryDisclaimer';
-import { Search, Filter, ArrowUpDown, RefreshCw, AlertTriangle, Layers } from 'lucide-react';
+import { Search, Filter, ArrowUpDown, RefreshCw, AlertTriangle, Layers, ShieldAlert } from 'lucide-react';
+
+// Lazy-load Three.js 3D Universe and Recharts Drawer to optimize bundle size
+const InvestmentUniverse3D = React.lazy(() =>
+  import('../components/InvestmentUniverse3D').then(m => ({ default: m.InvestmentUniverse3D }))
+);
+
+const FundDrawer = React.lazy(() =>
+  import('../components/FundDrawer').then(m => ({ default: m.FundDrawer }))
+);
 
 interface Props {
   initialData?: DashboardData | null;
@@ -71,7 +78,8 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
     // Category / Tag filter
     if (selectedCategory !== 'ALL') {
       if (selectedCategory === 'BUY_DIP') {
-        list = list.filter(f => f.alert?.tag?.includes('BUY'));
+        // Strictly Apps Script tag === "🔴 BUY"
+        list = list.filter(f => f.alert?.tag === '🔴 BUY');
       } else {
         list = list.filter(f => f.category.toLowerCase().includes(selectedCategory.toLowerCase()));
       }
@@ -103,6 +111,7 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
     return data.funds.find(f => f.schemeCode === selectedSchemeCode) || null;
   }, [selectedSchemeCode, data?.funds]);
 
+  // Loading Screen
   if (loading && !data) {
     return (
       <div className="min-h-screen bg-fintech-dark flex flex-col items-center justify-center p-4">
@@ -116,6 +125,42 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
     );
   }
 
+  // Error State: Honest reporting without fake data fallback
+  if (error && !data) {
+    return (
+      <div className="min-h-screen bg-fintech-dark text-slate-100 flex flex-col justify-between">
+        <Navbar
+          onRefresh={() => loadData(true)}
+          isRefreshing={refreshing}
+          lastUpdated=""
+        />
+        <main className="max-w-xl mx-auto px-4 py-16 text-center">
+          <div className="w-16 h-16 rounded-3xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 mx-auto shadow-glow-rose">
+            <AlertTriangle className="w-8 h-8" />
+          </div>
+          <h2 className="mt-6 text-2xl font-extrabold text-white font-mono">
+            Unable to Connect to Portfolio API
+          </h2>
+          <div className="mt-4 p-4 rounded-2xl bg-slate-900 border border-slate-800 text-xs font-mono text-slate-300 text-left space-y-2">
+            <p className="text-rose-400 font-semibold">{error}</p>
+            <p className="text-slate-500 text-[11px]">
+              If deploying for the first time, ensure DASHBOARD_API_URL and DASHBOARD_API_SHARED_SECRET are set in your Netlify Site configuration and that DashboardApi.gs is deployed as a Web App accessible by Anyone.
+            </p>
+          </div>
+          <button
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="mt-6 px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-mono font-bold text-xs flex items-center justify-center gap-2 mx-auto transition-all shadow-glow-cyan disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+            <span>Retry API Connection</span>
+          </button>
+        </main>
+        <StatutoryDisclaimer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-fintech-dark text-slate-100 flex flex-col justify-between">
       <div>
@@ -124,15 +169,15 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
           onRefresh={() => loadData(true)}
           isRefreshing={refreshing}
           lastUpdated={data?.lastUpdated || ''}
-          isDemo={data?._isDemo}
+          isDemo={data?._isDemo && import.meta.env.DEV}
         />
 
-        {/* Demo Mode Notice */}
-        {data?._isDemo && (
+        {/* Development Demo Mode Notice */}
+        {data?._isDemo && import.meta.env.DEV && (
           <div className="bg-amber-950/40 border-b border-amber-800/40 py-2 px-4 text-center text-xs font-mono text-amber-300 flex items-center justify-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5" />
             <span>
-              Preview Mode Active • Real Google Sheets API will be queried once deployed to Netlify with valid environment variables.
+              [LOCAL DEV ONLY] Running in development mock preview mode.
             </span>
           </div>
         )}
@@ -143,13 +188,20 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
             <PortfolioSummaryCards summary={data.portfolioSummary} />
           )}
 
-          {/* 2. 3D Investment Universe Canvas */}
+          {/* 2. 3D Investment Universe Canvas (Lazy Loaded) */}
           {data?.funds && (
-            <InvestmentUniverse3D
-              funds={data.funds}
-              onSelectFund={(code) => setSelectedSchemeCode(code)}
-              selectedSchemeCode={selectedSchemeCode}
-            />
+            <Suspense fallback={
+              <div className="w-full h-[460px] lg:h-[520px] rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-center font-mono text-xs text-slate-500">
+                <RefreshCw className="w-5 h-5 animate-spin mr-2 text-cyan-400" />
+                Loading 3D Engine...
+              </div>
+            }>
+              <InvestmentUniverse3D
+                funds={data.funds}
+                onSelectFund={(code) => setSelectedSchemeCode(code)}
+                selectedSchemeCode={selectedSchemeCode}
+              />
+            </Suspense>
           )}
 
           {/* 3. Top Performer & Buy On Dip Highlights */}
@@ -207,7 +259,7 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
                     { key: 'Mid Cap', label: 'Mid' },
                     { key: 'Small', label: 'Small' },
                     { key: 'Large', label: 'Large' },
-                    { key: 'BUY_DIP', label: '🔴 Dip' }
+                    { key: 'BUY_DIP', label: '🔴 BUY' }
                   ].map(cat => (
                     <button
                       key={cat.key}
@@ -262,11 +314,15 @@ export const DashboardPage: React.FC<Props> = ({ initialData }) => {
         </main>
       </div>
 
-      {/* Slide-over Fund Analytics Drawer */}
-      <FundDrawer
-        fund={activeFund}
-        onClose={() => setSelectedSchemeCode(null)}
-      />
+      {/* Slide-over Fund Analytics Drawer (Lazy Loaded) */}
+      {activeFund && (
+        <Suspense fallback={null}>
+          <FundDrawer
+            fund={activeFund}
+            onClose={() => setSelectedSchemeCode(null)}
+          />
+        </Suspense>
+      )}
 
       {/* Statutory Footer */}
       <StatutoryDisclaimer />

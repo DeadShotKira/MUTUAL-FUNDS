@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { ShieldCheck, Activity, Lock, ArrowRight, Sparkles, Orbit } from 'lucide-react';
+import { ShieldCheck, Activity, Lock, ArrowRight, Sparkles, Orbit, AlertCircle } from 'lucide-react';
 
 declare global {
   interface Window {
@@ -16,13 +16,18 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
   const { loginWithGoogle, loading, error } = useAuth();
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const [gisLoaded, setGisLoaded] = useState(false);
+  const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
 
   useEffect(() => {
     // Check if Google Identity Services script is available
     const checkGIS = () => {
       if (window.google?.accounts?.id) {
         setGisLoaded(true);
-        const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
+
+        if (!clientId) {
+          console.warn('VITE_GOOGLE_CLIENT_ID is not configured in environment.');
+          return;
+        }
 
         try {
           window.google.accounts.id.initialize({
@@ -55,7 +60,7 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
     };
 
     checkGIS();
-  }, [loginWithGoogle]);
+  }, [clientId, loginWithGoogle]);
 
   return (
     <div className="relative min-h-screen flex items-center justify-center p-4 overflow-hidden bg-fintech-dark">
@@ -92,7 +97,7 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
           </div>
           <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
             <Activity className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Real-Time AMFI NAV & Buy-on-Dip Signals</span>
+            <span>Real-Time AMFI NAV & Apps Script Alerts</span>
           </div>
           <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800/80">
             <ShieldCheck className="w-4 h-4 text-blue-400 shrink-0" />
@@ -107,23 +112,33 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
           </div>
         )}
 
+        {/* Missing Client ID alert */}
+        {!clientId && (
+          <div className="mt-5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+            <span>
+              Google Client ID not configured. Set <strong>VITE_GOOGLE_CLIENT_ID</strong> in your environment variables.
+            </span>
+          </div>
+        )}
+
         {/* Google Sign In Button Container */}
         <div className="mt-8 flex flex-col items-center justify-center">
           <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center">
-            {!gisLoaded && (
+            {!gisLoaded && clientId && (
               <div className="text-xs font-mono text-slate-500 animate-pulse">
                 Loading Google Authentication...
               </div>
             )}
           </div>
 
-          {/* Quick Preview Bypass Button */}
-          {onEnterPreview && (
+          {/* Development Preview Bypass (Exclusively rendered in local dev mode) */}
+          {import.meta.env.DEV && onEnterPreview && (
             <button
               onClick={onEnterPreview}
               className="mt-4 w-full py-2.5 px-4 rounded-full bg-slate-800/70 hover:bg-slate-800 border border-slate-700/60 text-slate-300 hover:text-white text-xs font-mono font-medium flex items-center justify-center gap-2 transition-all"
             >
-              <span>Explore Interactive 3D Demo</span>
+              <span>[DEV ONLY] Preview Local Mock UI</span>
               <ArrowRight className="w-3.5 h-3.5 text-cyan-400" />
             </button>
           )}

@@ -409,7 +409,7 @@ function generatePortfolioDashboardPayload_() {
       };
     }
 
-    if (alertNormalized.tag.includes("BUY")) {
+    if (alertNormalized.tag === "🔴 BUY") {
       buyCount++;
     } else if (alertNormalized.tag.includes("FALLING") || alertNormalized.tag.includes("WATCH")) {
       fallingCount++;
@@ -445,9 +445,9 @@ function generatePortfolioDashboardPayload_() {
     "ALL": findTopPerformerForPeriod_(fundResults, "ALL")
   };
 
-  // Buy on Dip candidates (Tag has BUY or percentValue <= -2.0)
+  // Buy on Dip candidates: Strictly where Apps Script checkNAVAlertModular returned exact "🔴 BUY" tag
   const buyOnDipFunds = fundResults.filter(f => {
-    return f.alert && (f.alert.tag.includes("BUY") || (typeof f.alert.percentValue === "number" && f.alert.percentValue <= -2.0));
+    return f.alert && f.alert.tag === "🔴 BUY";
   }).map(f => ({
     schemeCode: f.schemeCode,
     name: f.name,
@@ -455,7 +455,9 @@ function generatePortfolioDashboardPayload_() {
     sheetName: f.sheetName,
     latestNAV: f.latestNAV,
     percentValue: f.alert.percentValue,
+    percentDisplay: f.alert.percentDisplay,
     tag: f.alert.tag,
+    status: f.alert.status,
     severity: f.alert.severity,
     high10: f.alert.high10,
     low10: f.alert.low10,
@@ -589,6 +591,26 @@ function findTopPerformerForPeriod_(funds, periodKey) {
    ====================================================================================== */
 
 /**
+ * One-click setup function to initialize or view DASHBOARD_API_SHARED_SECRET.
+ * Select 'setupDashboardApiSecret' in the Apps Script function dropdown and click 'Run'.
+ * Requires no arguments and prints the exact key and value to copy into Netlify.
+ */
+function setupDashboardApiSecret() {
+  const existing = PropertiesService.getScriptProperties().getProperty("DASHBOARD_API_SHARED_SECRET");
+  if (existing) {
+    Logger.log("==================================================================");
+    Logger.log("ℹ️ DASHBOARD_API_SHARED_SECRET is already configured!");
+    Logger.log("KEY NAME: DASHBOARD_API_SHARED_SECRET");
+    Logger.log("SECRET VALUE: " + existing);
+    Logger.log("Configure this in your Netlify Environment Variables as:");
+    Logger.log("DASHBOARD_API_SHARED_SECRET=" + existing);
+    Logger.log("==================================================================");
+    return existing;
+  }
+  return setDashboardApiSecret();
+}
+
+/**
  * Run this function once in the Apps Script editor to set your shared secret.
  *
  * Example:
@@ -601,10 +623,12 @@ function setDashboardApiSecret(secret) {
   PropertiesService.getScriptProperties().setProperty("DASHBOARD_API_SHARED_SECRET", secretKey);
   Logger.log("==================================================================");
   Logger.log("✅ DASHBOARD_API_SHARED_SECRET successfully configured!");
+  Logger.log("KEY NAME: DASHBOARD_API_SHARED_SECRET");
   Logger.log("SECRET VALUE: " + secretKey);
   Logger.log("Save this secret value in your Netlify dashboard environment variable:");
   Logger.log("DASHBOARD_API_SHARED_SECRET=" + secretKey);
   Logger.log("==================================================================");
+  return secretKey;
 }
 
 /**

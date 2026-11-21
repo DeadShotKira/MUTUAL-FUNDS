@@ -65,11 +65,13 @@ flowchart LR
 3. In the left files list, click the **+** (Add a file) icon → select **Script**.
 4. Name the new file `DashboardApi.gs`.
 5. Copy and paste the entire contents of `DashboardApi.gs` (located in this repository) into the editor.
-6. In the function dropdown at the top, select **`setDashboardApiSecret`**, or run the following in the script:
-   ```javascript
-   setDashboardApiSecret("CREATE_A_LONG_RANDOM_SECRET_KEY_HERE_12345");
-   ```
-   *Note: Save this secret string. You will need it in Step 3 for Netlify.*
+6. In the function dropdown at the top, select **`setupDashboardApiSecret`** and click **Run**.
+   - It automatically checks or generates a secure token and logs the key and value:
+     ```
+     KEY NAME: DASHBOARD_API_SHARED_SECRET
+     SECRET VALUE: MUTUAL_FUND_SECURE_TOKEN_...
+     ```
+   *(Note: Save this secret value. You will paste it into your Netlify dashboard in Step 4).*
 7. Test the data extraction: In the function dropdown, select **`testDashboardApi`** and click **Run**. Check the Execution Log to ensure it logs portfolio valuation and funds correctly.
 8. Click **Deploy** (top right) → **New deployment**:
    - **Select type**: Click the gear icon ⚙️ → **Web app**.
@@ -145,11 +147,12 @@ In your Netlify Dashboard, go to:
 
 | Variable Name | Description | Example |
 |---|---|---|
-| `GOOGLE_CLIENT_ID` | OAuth Client ID from Google Cloud Console | `123456789-abcdefg.apps.googleusercontent.com` |
+| `VITE_GOOGLE_CLIENT_ID` | OAuth Client ID exposed to browser for Google Sign-In | `123456789-abcdefg.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_ID` | OAuth Client ID used by Netlify Functions to verify token audience | `123456789-abcdefg.apps.googleusercontent.com` |
 | `DASHBOARD_ALLOWED_EMAILS` | Comma-separated list of authorized Google emails | `your.email@gmail.com,family@gmail.com` |
 | `SESSION_SECRET` | 32+ character random string to sign cookies | `3f8a91b2c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9` |
 | `DASHBOARD_API_URL` | Deployed Apps Script Web App URL from Step 1 | `https://script.google.com/macros/s/AKfycb.../exec` |
-| `DASHBOARD_API_SHARED_SECRET` | Secret token matching `setDashboardApiSecret(...)` | `CREATE_A_LONG_RANDOM_SECRET_KEY_HERE_12345` |
+| `DASHBOARD_API_SHARED_SECRET` | Secret token logged by `setupDashboardApiSecret()` | `MUTUAL_FUND_SECURE_TOKEN_...` |
 
 > [!TIP]
 > After saving environment variables in Netlify, go to **Deploys** → **Trigger deploy** → **Clear cache and deploy site** to ensure all serverless functions load the fresh environment variables.
