@@ -16,11 +16,15 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
   const { loginWithGoogle, loading, error } = useAuth();
   const googleBtnRef = useRef<HTMLDivElement>(null);
   const [gisLoaded, setGisLoaded] = useState(false);
-  const clientId = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID || '';
+  const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
   useEffect(() => {
-    // Check if Google Identity Services script is available
+    let isMounted = true;
+    let timerId: ReturnType<typeof setTimeout> | null = null;
+
     const checkGIS = () => {
+      if (!isMounted) return;
+
       if (window.google?.accounts?.id) {
         setGisLoaded(true);
 
@@ -40,7 +44,9 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
             auto_select: false
           });
 
-          if (googleBtnRef.current) {
+          if (googleBtnRef.current && isMounted) {
+            // Safely clear any previously rendered iframe before rendering
+            googleBtnRef.current.innerHTML = '';
             window.google.accounts.id.renderButton(googleBtnRef.current, {
               type: 'standard',
               theme: 'filled_black',
@@ -55,11 +61,19 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
           console.warn('Google Identity Services init warning:', e);
         }
       } else {
-        setTimeout(checkGIS, 300);
+        timerId = setTimeout(checkGIS, 250);
       }
     };
 
     checkGIS();
+
+    return () => {
+      isMounted = false;
+      if (timerId) clearTimeout(timerId);
+      if (googleBtnRef.current) {
+        googleBtnRef.current.innerHTML = '';
+      }
+    };
   }, [clientId, loginWithGoogle]);
 
   return (
@@ -124,12 +138,18 @@ export const LoginPage: React.FC<Props> = ({ onEnterPreview }) => {
 
         {/* Google Sign In Button Container */}
         <div className="mt-8 flex flex-col items-center justify-center">
-          <div ref={googleBtnRef} className="min-h-[44px] flex items-center justify-center">
+          <div className="min-h-[44px] flex items-center justify-center relative w-full">
             {!gisLoaded && clientId && (
               <div className="text-xs font-mono text-slate-500 animate-pulse">
                 Loading Google Authentication...
               </div>
             )}
+            {/* Dedicated unmanaged mount container for Google Identity Services.
+                React must NEVER render any children inside this div. */}
+            <div
+              ref={googleBtnRef}
+              className={!gisLoaded ? 'hidden' : 'flex justify-center w-full'}
+            />
           </div>
 
           {/* Development Preview Bypass (Exclusively rendered in local dev mode) */}

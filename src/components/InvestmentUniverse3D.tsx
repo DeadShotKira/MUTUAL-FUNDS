@@ -1,15 +1,43 @@
 import React, { useRef, useState, useMemo, Suspense } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls, Stars, Html } from '@react-three/drei';
+import { OrbitControls, Stars } from '@react-three/drei';
 import * as THREE from 'three';
 import { MutualFund } from '../types/portfolio';
-import { formatINR, formatPercent, getAlertBadgeStyle } from '../utils/formatters';
-import { Orbit, Sparkles, Eye, RotateCcw, Play, Pause, Layers } from 'lucide-react';
+import { formatINR, formatPercent } from '../utils/formatters';
+import { Orbit, RotateCcw, Play, Pause, Layers, ExternalLink } from 'lucide-react';
 
 interface Props {
   funds: MutualFund[];
   onSelectFund: (schemeCode: string) => void;
   selectedSchemeCode?: string | null;
+}
+
+// Resilient WebGL Error Boundary to prevent any canvas crash from blanking the dashboard
+interface ErrorBoundaryProps {
+  children: React.ReactNode;
+  fallback: React.ReactNode;
+}
+
+class WebGLErrorBoundary extends React.Component<ErrorBoundaryProps, { hasError: boolean }> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: any) {
+    console.warn('WebGL / Three.js Canvas error caught gracefully:', error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 
 // Single Orbit Ring line
@@ -81,7 +109,7 @@ const PortfolioSun: React.FC<{ isProfit: boolean }> = ({ isProfit }) => {
   );
 };
 
-// Orbiting Fund Node
+// Orbiting Fund Node (100% Pure Three.js - No unmanaged DOM children)
 interface FundNodeProps {
   fund: MutualFund;
   index: number;
@@ -122,7 +150,7 @@ const FundNode: React.FC<FundNodeProps> = ({
     if (groupRef.current) {
       const x = Math.cos(angleRef.current) * orbitRadius;
       const z = Math.sin(angleRef.current) * orbitRadius;
-      const y = Math.sin(angleRef.current * 2) * 0.3; // subtle wave
+      const y = Math.sin(angleRef.current * 2) * 0.3; // subtle orbital wave
       groupRef.current.position.set(x, y, z);
     }
     if (meshRef.current) {
@@ -131,7 +159,7 @@ const FundNode: React.FC<FundNodeProps> = ({
   });
 
   const isHovered = hoveredCode === fund.schemeCode;
-  const isBuy = fund.alert?.tag?.includes('BUY');
+  const isBuy = fund.alert?.tag === '🔴 BUY';
   const nodeColor = isBuy ? '#f43f5e' : fund.color || '#3b82f6';
 
   return (
@@ -156,7 +184,7 @@ const FundNode: React.FC<FundNodeProps> = ({
           <meshStandardMaterial
             color={nodeColor}
             emissive={nodeColor}
-            emissiveIntensity={isHovered || isSelected ? 1.0 : isBuy ? 0.8 : 0.4}
+            emissiveIntensity={isHovered || isSelected ? 1.2 : isBuy ? 0.9 : 0.4}
             roughness={0.3}
             metalness={0.7}
           />
@@ -165,44 +193,14 @@ const FundNode: React.FC<FundNodeProps> = ({
         {/* Pulsing ring for BUY alerts or Selected fund */}
         {(isBuy || isSelected) && (
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <ringGeometry args={[nodeSize * 1.3, nodeSize * 1.5, 32]} />
+            <ringGeometry args={[nodeSize * 1.3, nodeSize * 1.55, 32]} />
             <meshBasicMaterial
               color={isBuy ? '#f43f5e' : '#06b6d4'}
               transparent
-              opacity={0.8}
+              opacity={0.85}
               side={THREE.DoubleSide}
             />
           </mesh>
-        )}
-
-        {/* HTML 3D Floating Tooltip on Hover */}
-        {isHovered && (
-          <Html distanceFactor={14} position={[0, nodeSize + 0.5, 0]} center>
-            <div className="pointer-events-none rounded-xl bg-slate-900/95 border border-cyan-500/50 p-3 shadow-2xl backdrop-blur-md w-48 text-left animate-in fade-in zoom-in-95 duration-150 z-50">
-              <div className="flex items-center justify-between gap-1">
-                <span className="text-[10px] font-mono uppercase px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-400 font-bold border border-cyan-800">
-                  {fund.category}
-                </span>
-                <span className="text-[10px] font-mono text-slate-400">{fund.schemeCode}</span>
-              </div>
-              <h5 className="mt-1 text-xs font-bold text-white leading-tight truncate">
-                {fund.shortName || fund.name}
-              </h5>
-              <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between font-mono text-[11px]">
-                <span className="text-slate-400">NAV: ₹{fund.latestNAV.toFixed(2)}</span>
-                <span className={fund.returnPct >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
-                  {formatPercent(fund.returnPct)}
-                </span>
-              </div>
-              <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                <span>Value: {formatINR(fund.currentValue, true)}</span>
-                <span className="text-rose-400 font-bold">{fund.alert?.tag}</span>
-              </div>
-              <p className="mt-1.5 text-[9px] text-cyan-400 text-center font-mono">
-                Click to inspect details
-              </p>
-            </div>
-          </Html>
         )}
       </group>
     </>
@@ -236,7 +234,7 @@ const FallbackRadar2D: React.FC<{
           const x = 50 + Math.cos(angle) * radiusPct;
           const y = 50 + Math.sin(angle) * radiusPct;
           const isSelected = selectedSchemeCode === f.schemeCode;
-          const isBuy = f.alert?.tag?.includes('BUY');
+          const isBuy = f.alert?.tag === '🔴 BUY';
 
           return (
             <button
@@ -279,6 +277,11 @@ export const InvestmentUniverse3D: React.FC<Props> = ({
   const [autoRotate, setAutoRotate] = useState<boolean>(true);
   const [hoveredCode, setHoveredCode] = useState<string | null>(null);
   const controlsRef = useRef<any>(null);
+
+  const hoveredFund = useMemo(() => {
+    if (!hoveredCode) return null;
+    return funds.find(f => f.schemeCode === hoveredCode) || null;
+  }, [funds, hoveredCode]);
 
   const resetCamera = () => {
     if (controlsRef.current) {
@@ -329,48 +332,92 @@ export const InvestmentUniverse3D: React.FC<Props> = ({
         </div>
       </div>
 
+      {/* Floating HUD Inspection Card on Hover (100% Pure React DOM Overlay) */}
+      {hoveredFund && (
+        <div
+          onClick={() => onSelectFund(hoveredFund.schemeCode)}
+          className="absolute top-16 right-4 z-20 w-64 p-3.5 rounded-2xl bg-slate-900/90 border border-cyan-500/50 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-2 duration-150 cursor-pointer hover:border-cyan-400 group"
+        >
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-cyan-950 text-cyan-400 font-bold border border-cyan-800">
+              {hoveredFund.category}
+            </span>
+            <span className="text-[10px] font-mono text-slate-400">#{hoveredFund.schemeCode}</span>
+          </div>
+          <h5 className="mt-1.5 text-xs font-bold text-white leading-tight group-hover:text-cyan-400 transition-colors">
+            {hoveredFund.name}
+          </h5>
+          <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between font-mono text-xs">
+            <span className="text-slate-400">NAV: ₹{hoveredFund.latestNAV.toFixed(2)}</span>
+            <span className={hoveredFund.returnPct >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+              {formatPercent(hoveredFund.returnPct)}
+            </span>
+          </div>
+          <div className="mt-1.5 flex items-center justify-between text-[11px] font-mono text-slate-400">
+            <span>Value: {formatINR(hoveredFund.currentValue, true)}</span>
+            <span className={hoveredFund.alert?.tag === '🔴 BUY' ? 'text-rose-400 font-bold' : 'text-emerald-400'}>
+              {hoveredFund.alert?.tag}
+            </span>
+          </div>
+          <p className="mt-2 text-[10px] text-cyan-400 text-center font-mono flex items-center justify-center gap-1 group-hover:underline">
+            <span>Click to open historical charts</span>
+            <ExternalLink className="w-3 h-3" />
+          </p>
+        </div>
+      )}
+
       {/* Main Visualizer Area */}
       {viewMode === '3D' ? (
-        <Suspense fallback={
-          <div className="w-full h-full flex items-center justify-center font-mono text-xs text-slate-400">
-            Initializing 3D Universe...
-          </div>
-        }>
-          <Canvas
-            camera={{ position: [0, 8, 14], fov: 45 }}
-            className="w-full h-full cursor-grab active:cursor-grabbing"
-          >
-            <ambientLight intensity={0.4} />
-            <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
-
-            {/* Central Portfolio Core */}
-            <PortfolioSun isProfit={isOverallProfit} />
-
-            {/* Orbiting Fund Nodes */}
-            {funds.map((fund, idx) => (
-              <FundNode
-                key={fund.schemeCode}
-                fund={fund}
-                index={idx}
-                total={funds.length}
-                isSelected={selectedSchemeCode === fund.schemeCode}
-                onSelect={onSelectFund}
-                hoveredCode={hoveredCode}
-                setHoveredCode={setHoveredCode}
-                autoRotate={autoRotate}
-              />
-            ))}
-
-            <OrbitControls
-              ref={controlsRef}
-              enablePan={true}
-              enableZoom={true}
-              minDistance={5}
-              maxDistance={28}
-              maxPolarAngle={Math.PI / 2 + 0.1}
+        <WebGLErrorBoundary
+          fallback={
+            <FallbackRadar2D
+              funds={funds}
+              onSelect={onSelectFund}
+              selectedSchemeCode={selectedSchemeCode}
             />
-          </Canvas>
-        </Suspense>
+          }
+        >
+          <Suspense fallback={
+            <div className="w-full h-full flex items-center justify-center font-mono text-xs text-slate-400">
+              Initializing 3D Universe...
+            </div>
+          }>
+            <Canvas
+              camera={{ position: [0, 8, 14], fov: 45 }}
+              className="w-full h-full cursor-grab active:cursor-grabbing"
+            >
+              <ambientLight intensity={0.4} />
+              <Stars radius={50} depth={50} count={3000} factor={4} saturation={0} fade speed={1} />
+
+              {/* Central Portfolio Core */}
+              <PortfolioSun isProfit={isOverallProfit} />
+
+              {/* Orbiting Fund Nodes */}
+              {funds.map((fund, idx) => (
+                <FundNode
+                  key={fund.schemeCode}
+                  fund={fund}
+                  index={idx}
+                  total={funds.length}
+                  isSelected={selectedSchemeCode === fund.schemeCode}
+                  onSelect={onSelectFund}
+                  hoveredCode={hoveredCode}
+                  setHoveredCode={setHoveredCode}
+                  autoRotate={autoRotate}
+                />
+              ))}
+
+              <OrbitControls
+                ref={controlsRef}
+                enablePan={true}
+                enableZoom={true}
+                minDistance={5}
+                maxDistance={28}
+                maxPolarAngle={Math.PI / 2 + 0.1}
+              />
+            </Canvas>
+          </Suspense>
+        </WebGLErrorBoundary>
       ) : (
         <FallbackRadar2D
           funds={funds}
